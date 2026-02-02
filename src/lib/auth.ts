@@ -54,6 +54,10 @@ export const auth = betterAuth({
           discoveryUrl: `${process.env.NEXT_PUBLIC_AUTH_URL}/.well-known/openid-configuration`,
           scopes: ["openid", "profile", "email"],
           pkce: true,
+          // Force login form even if ymir has a session
+          authorizationUrlParams: {
+            prompt: "login",
+          },
 
           async getUserInfo(tokens) {
             const idToken = tokens.idToken;
