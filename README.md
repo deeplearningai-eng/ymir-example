@@ -2,6 +2,10 @@
 
 Minimal example showing how to integrate with [DLAI Auth Server (Ymir)](https://auth-dev.deeplearning.ai).
 
+## Demo
+
+[▶️ Watch the demo video](./assets/demo.mov)
+
 ## What This Demonstrates
 
 - Sign in via DLAI auth server (OAuth 2.1 + PKCE)
