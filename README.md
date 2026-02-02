@@ -52,7 +52,9 @@ src/
 └── app/
     ├── layout.tsx
     ├── page.tsx        # Demo UI
-    └── api/auth/[...all]/route.ts  # Auth API endpoint
+    └── api/auth/
+        ├── [...all]/route.ts  # Better Auth routes
+        └── logout/route.ts    # Federated logout
 ```
 
 ## How It Works
@@ -112,11 +114,55 @@ For production, you'll need your own OAuth credentials:
 2. Provide your redirect URI: `https://your-app.com/api/auth/oauth2/callback/dlai`
 3. Update `.env.local` with your credentials and `NEXT_PUBLIC_AUTH_URL=https://auth.deeplearning.ai`
 
+## Important: Tricky Parts
+
+### 1. Redirect URI has `/oauth2/` in the path
+
+Better-auth's `genericOAuth` plugin uses this callback pattern:
+```
+/api/auth/oauth2/callback/{providerId}
+```
+
+**NOT** `/api/auth/callback/{providerId}`. Make sure to register the correct URI:
+```
+http://localhost:3000/api/auth/oauth2/callback/dlai
+```
+
+### 2. Federated Logout (SSO)
+
+Signing out requires clearing **both** sessions:
+- Local app session (better-auth)
+- Ymir auth server session
+
+The `/api/auth/logout` route handles this:
+
+```typescript
+// 1. Clear local session via better-auth API
+const signOutResponse = await auth.api.signOut({ headers: request.headers });
+
+// 2. Return ymir sign-out URL for client to redirect
+const redirectUrl = `${AUTH_URL}/sign-out?callbackURL=${APP_URL}`;
+return NextResponse.json({ success: true, redirectUrl });
+```
+
+Client calls this and redirects:
+```typescript
+const res = await fetch("/api/auth/logout", { method: "POST" });
+const { redirectUrl } = await res.json();
+window.location.href = redirectUrl;
+```
+
+Without this, users would auto-login after signing out (ymir session still exists).
+
+### 3. Token Extraction Timing
+
+The `dlaiJwtToken` is extracted in `getUserInfo()` during OAuth callback. It's stored temporarily and passed to `customSession`. If the token is missing in session, check that `getUserInfo()` is properly extracting and storing it.
+
 ## Troubleshooting
 
 ### "Invalid redirect_uri"
 
-Your callback URL must be registered with the OAuth client:
+Your callback URL must be registered with the OAuth client. Note the `/oauth2/` in the path:
 ```
 http://localhost:3000/api/auth/oauth2/callback/dlai
 ```
@@ -127,7 +173,11 @@ Ensure your OAuth scopes include `openid`.
 
 ### Token not in session
 
-Check that Ymir is returning claims in the id_token. The `dlaiJwtToken` is extracted during OAuth callback.
+Check that Ymir is returning claims in the id_token. The `dlaiJwtToken` is extracted during OAuth callback in `getUserInfo()`.
+
+### Auto-login after sign out
+
+You need to clear both local and ymir sessions. Use the `/api/auth/logout` route pattern shown above.
 
 ## License
 
