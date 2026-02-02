@@ -1,6 +1,6 @@
 # Ymir Example
 
-Minimal example showing how to integrate with [DLAI Auth Server (Ymir)](https://auth.deeplearning.ai).
+Minimal example showing how to integrate with [DLAI Auth Server (Ymir)](https://auth-dev.deeplearning.ai).
 
 ## What This Demonstrates
 
@@ -10,10 +10,12 @@ Minimal example showing how to integrate with [DLAI Auth Server (Ymir)](https://
 
 ## Quick Start
 
+Dev credentials are included - just clone and run!
+
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/deeplearningai/ymir-example.git
+git clone https://github.com/deeplearningai-eng/ymir-example.git
 cd ymir-example
 npm install
 ```
@@ -24,12 +26,7 @@ npm install
 cp .env.example .env.local
 ```
 
-Edit `.env.local` with your OAuth credentials (contact DLAI team to get these):
-
-```bash
-DLAI_OAUTH_CLIENT_ID=your-client-id
-DLAI_OAUTH_CLIENT_SECRET=your-client-secret
-```
+The `.env.example` includes dev credentials that work with `auth-dev.deeplearning.ai`.
 
 ### 3. Run
 
@@ -39,13 +36,11 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000)
 
-## Getting OAuth Credentials
+### 4. Sign in
 
-Contact the DLAI team to register your app. You'll need to provide:
-
-- **App name**: Your application name
-- **Redirect URI**: `http://localhost:3000/api/auth/callback/dlai` (for local dev)
-- **Production URI**: Your production callback URL
+Click "Sign in with DLAI" and use these test credentials:
+- **Email**: `damon@deeplearning.ai`
+- **Password**: `qwe`
 
 ## Project Structure
 
@@ -92,7 +87,7 @@ genericOAuth({
 const { data: session } = useSession();
 
 // Call DLAI API
-fetch("https://platform-api.dlai.link/user/profile", {
+fetch("https://platform-api-dev.dlai.link/user/profile", {
   headers: {
     Authorization: `Bearer ${session.user.dlaiJwtToken}`,
   },
@@ -109,13 +104,21 @@ The `id_token` from Ymir contains:
 | `dlaiUserId` | number | DLAI user ID |
 | `dlaiUserHash` | string | User hash for analytics |
 
+## Production Setup
+
+For production, you'll need your own OAuth credentials:
+
+1. Contact the DLAI team to register your app
+2. Provide your redirect URI: `https://your-app.com/api/auth/oauth2/callback/dlai`
+3. Update `.env.local` with your credentials and `NEXT_PUBLIC_AUTH_URL=https://auth.deeplearning.ai`
+
 ## Troubleshooting
 
 ### "Invalid redirect_uri"
 
-Your callback URL must be registered. Contact DLAI team to add:
+Your callback URL must be registered with the OAuth client:
 ```
-http://localhost:3000/api/auth/callback/dlai
+http://localhost:3000/api/auth/oauth2/callback/dlai
 ```
 
 ### "Missing id_token"
