@@ -7,22 +7,12 @@ export async function POST(request: NextRequest) {
     headers: request.headers,
   });
 
-  // Build OIDC end_session URL
-  const endSessionUrl = new URL(
-    "/api/auth/oauth2/end-session",
-    process.env.NEXT_PUBLIC_AUTH_URL
-  );
-  endSessionUrl.searchParams.set(
-    "client_id",
-    process.env.DLAI_OAUTH_CLIENT_ID!
-  );
-  endSessionUrl.searchParams.set(
-    "post_logout_redirect_uri",
-    process.env.NEXT_PUBLIC_APP_URL!
-  );
+  // Redirect to ymir's sign-out page to clear auth server session
+  const signOutUrl = new URL("/sign-out", process.env.NEXT_PUBLIC_AUTH_URL);
+  signOutUrl.searchParams.set("callbackURL", process.env.NEXT_PUBLIC_APP_URL!);
 
   // Return redirect to clear ymir session
-  return NextResponse.redirect(endSessionUrl.toString(), {
+  return NextResponse.redirect(signOutUrl.toString(), {
     headers: response.headers, // Include cookie clearing headers
   });
 }
