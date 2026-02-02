@@ -111,14 +111,20 @@ export default function Home() {
       </section>
 
       <section style={{ marginTop: "2rem" }}>
-        <form action="/api/auth/logout" method="POST">
-          <button
-            type="submit"
-            style={{ padding: "0.5rem 1rem", cursor: "pointer" }}
-          >
-            Sign out
-          </button>
-        </form>
+        <button
+          onClick={async () => {
+            const res = await fetch("/api/auth/logout", { method: "POST" });
+            if (res.ok) {
+              const data = (await res.json()) as { redirectUrl?: string };
+              if (data.redirectUrl) {
+                window.location.href = data.redirectUrl;
+              }
+            }
+          }}
+          style={{ padding: "0.5rem 1rem", cursor: "pointer" }}
+        >
+          Sign out
+        </button>
       </section>
     </div>
   );
