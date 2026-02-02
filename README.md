@@ -4,7 +4,7 @@ Minimal example showing how to integrate with [DLAI Auth Server (Ymir)](https://
 
 ## Demo
 
-https://github.com/deeplearningai-eng/ymir-example/releases/download/v1.0.0/demo.mp4
+https://github.com/user-attachments/assets/62701bfb-c651-4472-9186-51a8a270e3de
 
 ## What This Demonstrates
 
