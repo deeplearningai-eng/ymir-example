@@ -158,6 +158,30 @@ Without this, users would auto-login after signing out (ymir session still exist
 
 The `dlaiJwtToken` is extracted in `getUserInfo()` during OAuth callback. It's stored temporarily and passed to `customSession`. If the token is missing in session, check that `getUserInfo()` is properly extracting and storing it.
 
+### 4. DLAI API Must Be Called Server-Side
+
+The DLAI API doesn't allow browser CORS from localhost. Call it from a server-side API route:
+
+```typescript
+// src/app/api/profile/route.ts
+export async function GET(request: NextRequest) {
+  const session = await auth.api.getSession({ headers: request.headers });
+  const token = session.user.dlaiJwtToken;
+
+  // Server-side fetch - no CORS issues
+  const res = await fetch(`${DLAI_API_URL}/user/profile`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  return NextResponse.json(await res.json());
+}
+```
+
+Client calls your API route instead:
+```typescript
+const res = await fetch("/api/profile");
+```
+
 ## Troubleshooting
 
 ### "Invalid redirect_uri"

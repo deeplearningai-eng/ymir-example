@@ -10,19 +10,17 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
 
   async function fetchProfile() {
-    if (!session?.user.dlaiJwtToken) return;
-
     setLoading(true);
     setError(null);
 
     try {
-      const res = await fetch("https://platform-api.dlai.link/user/profile", {
-        headers: {
-          Authorization: `Bearer ${session.user.dlaiJwtToken}`,
-        },
-      });
+      // Call server-side API route (avoids CORS issues with DLAI API)
+      const res = await fetch("/api/profile");
 
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || `API error: ${res.status}`);
+      }
       setProfile(await res.json());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch profile");
@@ -88,7 +86,7 @@ export default function Home() {
         <h2>Call DLAI API</h2>
         <button
           onClick={fetchProfile}
-          disabled={loading || !session.user.dlaiJwtToken}
+          disabled={loading}
           style={{ padding: "0.5rem 1rem", cursor: "pointer" }}
         >
           {loading ? "Loading..." : "Fetch Profile from DLAI API"}
