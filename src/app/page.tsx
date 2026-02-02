@@ -112,7 +112,14 @@ export default function Home() {
 
       <section style={{ marginTop: "2rem" }}>
         <button
-          onClick={() => signOut()}
+          onClick={async () => {
+            // Sign out locally first
+            await signOut();
+            // Then redirect to ymir to clear session there
+            const authUrl = process.env.NEXT_PUBLIC_AUTH_URL;
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+            window.location.href = `${authUrl}/sign-out?callbackURL=${encodeURIComponent(appUrl || "/")}`;
+          }}
           style={{ padding: "0.5rem 1rem", cursor: "pointer" }}
         >
           Sign out
