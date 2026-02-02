@@ -1,6 +1,6 @@
 "use client";
 
-import { useSession, signIn, signOut } from "@/lib/auth-client";
+import { useSession, signIn } from "@/lib/auth-client";
 import { useState } from "react";
 
 export default function Home() {
@@ -111,21 +111,14 @@ export default function Home() {
       </section>
 
       <section style={{ marginTop: "2rem" }}>
-        <button
-          onClick={async () => {
-            // Sign out locally first
-            await signOut();
-            // Use OIDC RP-Initiated Logout (RFC 9126)
-            const params = new URLSearchParams({
-              client_id: process.env.NEXT_PUBLIC_DLAI_OAUTH_CLIENT_ID!,
-              post_logout_redirect_uri: process.env.NEXT_PUBLIC_APP_URL!,
-            });
-            window.location.href = `${process.env.NEXT_PUBLIC_AUTH_URL}/api/auth/oauth2/end-session?${params}`;
-          }}
-          style={{ padding: "0.5rem 1rem", cursor: "pointer" }}
-        >
-          Sign out
-        </button>
+        <form action="/api/auth/logout" method="POST">
+          <button
+            type="submit"
+            style={{ padding: "0.5rem 1rem", cursor: "pointer" }}
+          >
+            Sign out
+          </button>
+        </form>
       </section>
     </div>
   );
