@@ -115,10 +115,12 @@ export default function Home() {
           onClick={async () => {
             // Sign out locally first
             await signOut();
-            // Then redirect to ymir to clear session there
-            const authUrl = process.env.NEXT_PUBLIC_AUTH_URL;
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-            window.location.href = `${authUrl}/sign-out?callbackURL=${encodeURIComponent(appUrl || "/")}`;
+            // Use OIDC RP-Initiated Logout (RFC 9126)
+            const params = new URLSearchParams({
+              client_id: process.env.NEXT_PUBLIC_DLAI_OAUTH_CLIENT_ID!,
+              post_logout_redirect_uri: process.env.NEXT_PUBLIC_APP_URL!,
+            });
+            window.location.href = `${process.env.NEXT_PUBLIC_AUTH_URL}/api/auth/oauth2/end-session?${params}`;
           }}
           style={{ padding: "0.5rem 1rem", cursor: "pointer" }}
         >
