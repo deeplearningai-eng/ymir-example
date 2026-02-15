@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
   // Build OIDC RP-Initiated Logout URL
   const discovery = await discoveryPromise;
   const params = new URLSearchParams({
+    client_id: process.env.DLAI_OAUTH_CLIENT_ID!,
     post_logout_redirect_uri: process.env.NEXT_PUBLIC_APP_URL!,
   });
   if (idToken) {
