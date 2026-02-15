@@ -29,12 +29,32 @@ interface DlaiAccountData {
   dlaiJwtToken: string;
   dlaiUserId: number;
   dlaiUserHash?: string;
+  /** Raw OIDC id_token JWT — used for RP-Initiated Logout (id_token_hint) */
+  idToken?: string;
 }
 
 const DLAI_COOKIE_NAME = "dlai_account_data";
 
 // Temporary storage for passing claims from getUserInfo to after hook
-let pendingClaims: DlaiClaims | null = null;
+let pendingClaims: (DlaiClaims & { rawIdToken?: string }) | null = null;
+
+const DISCOVERY_URL = `${process.env.NEXT_PUBLIC_AUTH_URL}/.well-known/openid-configuration`;
+
+/** Cached OIDC discovery (reused by genericOAuth and logout) */
+export const discoveryPromise = fetch(DISCOVERY_URL)
+  .then(
+    (res) =>
+      res.json() as Promise<{
+        userinfo_endpoint: string;
+        token_endpoint: string;
+        end_session_endpoint: string;
+      }>,
+  )
+  .then((data) => ({
+    userinfoEndpoint: data.userinfo_endpoint,
+    tokenEndpoint: data.token_endpoint,
+    endSessionEndpoint: data.end_session_endpoint,
+  }));
 
 export const auth = betterAuth({
   baseURL: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth`,
@@ -51,7 +71,7 @@ export const auth = betterAuth({
           providerId: "dlai",
           clientId: process.env.DLAI_OAUTH_CLIENT_ID!,
           clientSecret: process.env.DLAI_OAUTH_CLIENT_SECRET!,
-          discoveryUrl: `${process.env.NEXT_PUBLIC_AUTH_URL}/.well-known/openid-configuration`,
+          discoveryUrl: DISCOVERY_URL,
           scopes: ["openid", "profile", "email"],
           pkce: true,
           // Force login form even if ymir has a session
@@ -66,7 +86,7 @@ export const auth = betterAuth({
             }
 
             const claims = decodeJwt(idToken) as DlaiClaims;
-            pendingClaims = claims;
+            pendingClaims = { ...claims, rawIdToken: idToken };
 
             return {
               id: claims.sub,
@@ -121,6 +141,7 @@ export const auth = betterAuth({
             dlaiJwtToken: claims.dlaiJwtToken,
             dlaiUserId: claims.dlaiUserId,
             dlaiUserHash: claims.dlaiUserHash,
+            idToken: claims.rawIdToken,
           }),
           {
             httpOnly: true,
