@@ -66,7 +66,7 @@ src/
 
 1. **User clicks "Sign in"** → Redirects to DLAI auth server
 2. **User authenticates** → Google, LinkedIn, or email/password
-3. **OAuth callback** → App receives `id_token` with DLAI claims
+3. **OAuth callback** → App fetches DLAI claims from `/oauth2/userinfo`
 4. **Extract token** → `dlaiJwtToken` and raw `idToken` stored in cookie
 5. **Call DLAI API** → Use token as Bearer auth
 6. **Sign out** → OIDC RP-Initiated Logout revokes both local and ymir sessions
@@ -82,7 +82,10 @@ genericOAuth({
     discoveryUrl: `${AUTH_URL}/.well-known/openid-configuration`,
     // Token extraction happens in getUserInfo()
     async getUserInfo(tokens) {
-      const claims = decodeJwt(tokens.idToken!);
+      const res = await fetch(discovery.userinfoEndpoint, {
+        headers: { Authorization: `Bearer ${tokens.accessToken}` },
+      });
+      const claims = await res.json();
       // claims.dlaiJwtToken is the token for DLAI APIs
     },
   }],
@@ -104,7 +107,7 @@ fetch("https://platform-api-dev.dlai.link/user/profile", {
 
 ## Token Claims
 
-The `id_token` from Ymir contains:
+The `/oauth2/userinfo` endpoint from Ymir returns:
 
 | Claim | Type | Description |
 |-------|------|-------------|
@@ -173,7 +176,7 @@ Without this, users would auto-login after signing out (ymir session still exist
 
 ### 3. Token Extraction Timing
 
-The `dlaiJwtToken` is extracted in `getUserInfo()` during OAuth callback. It's stored temporarily and passed to `customSession`. If the token is missing in session, check that `getUserInfo()` is properly extracting and storing it.
+The `dlaiJwtToken` is fetched from `/oauth2/userinfo` in `getUserInfo()` during OAuth callback. It's stored temporarily and passed to `customSession`. If the token is missing in session, check that `getUserInfo()` is properly fetching and storing it.
 
 ### 4. DLAI API Must Be Called Server-Side
 
@@ -214,7 +217,7 @@ Ensure your OAuth scopes include `openid`.
 
 ### Token not in session
 
-Check that Ymir is returning claims in the id_token. The `dlaiJwtToken` is extracted during OAuth callback in `getUserInfo()`.
+Check that Ymir is returning claims from `/oauth2/userinfo`. The `dlaiJwtToken` is fetched during OAuth callback in `getUserInfo()`.
 
 ### Auto-login after sign out
 
