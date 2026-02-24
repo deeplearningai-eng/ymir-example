@@ -2,10 +2,10 @@
  * Better Auth configuration for DLAI authentication
  *
  * This integrates with Ymir (DLAI auth server) using OAuth 2.1 + PKCE.
- * The dlaiJwtToken from the id_token can be used to call DLAI APIs.
+ * The dlaiJwtToken from userinfo can be used to call DLAI APIs.
  *
  * Flow:
- * 1. getUserInfo() extracts DLAI claims from id_token, stores in pendingClaims
+ * 1. getUserInfo() fetches DLAI claims from /oauth2/userinfo via access token
  * 2. after hook stores claims in cookie during OAuth callback
  * 3. customSession() reads claims from cookie for every session request
  */
@@ -13,7 +13,6 @@
 import { betterAuth } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
 import { customSession, genericOAuth } from "better-auth/plugins";
-import { decodeJwt } from "jose";
 
 interface DlaiClaims {
   sub: string;
@@ -80,13 +79,20 @@ export const auth = betterAuth({
           },
 
           async getUserInfo(tokens) {
-            const idToken = tokens.idToken;
-            if (!idToken) {
-              throw new Error("Missing id_token in OAuth response");
+            const discovery = await discoveryPromise;
+            const res = await fetch(discovery.userinfoEndpoint, {
+              headers: { Authorization: `Bearer ${tokens.accessToken}` },
+            });
+            if (!res.ok) {
+              throw new Error("Failed to fetch userinfo");
+            }
+            const claims = (await res.json()) as DlaiClaims;
+
+            if (!claims.sub) {
+              throw new Error("Missing sub claim in userinfo response");
             }
 
-            const claims = decodeJwt(idToken) as DlaiClaims;
-            pendingClaims = { ...claims, rawIdToken: idToken };
+            pendingClaims = { ...claims, rawIdToken: tokens.idToken };
 
             return {
               id: claims.sub,
