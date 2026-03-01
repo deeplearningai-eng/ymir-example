@@ -11,6 +11,7 @@ https://github.com/user-attachments/assets/62701bfb-c651-4472-9186-51a8a270e3de
 - Sign in via DLAI auth server (OAuth 2.1 + PKCE)
 - Extract `dlaiJwtToken` from the session
 - Call DLAI API (`/user/profile`) using the token
+- **Automatic token refresh** when the DLAI JWT expires
 - Federated logout via OIDC RP-Initiated Logout
 
 ## Quick Start
@@ -53,13 +54,16 @@ Click "Sign in with DLAI" and use these test credentials:
 src/
 ├── lib/
 │   ├── auth.ts         # Better Auth server config
-│   └── auth-client.ts  # React auth hooks
+│   ├── auth-client.ts  # React auth hooks
+│   └── refresh.ts      # Server-side DLAI token refresh
 └── app/
     ├── layout.tsx
     ├── page.tsx        # Demo UI
-    └── api/auth/
-        ├── [...all]/route.ts  # Better Auth routes
-        └── logout/route.ts    # OIDC RP-Initiated Logout
+    └── api/
+        ├── auth/
+        │   ├── [...all]/route.ts  # Better Auth routes
+        │   └── logout/route.ts    # OIDC RP-Initiated Logout
+        └── profile/route.ts       # DLAI API proxy with auto-refresh
 ```
 
 ## How It Works
@@ -69,7 +73,8 @@ src/
 3. **OAuth callback** → App fetches DLAI claims from `/oauth2/userinfo`
 4. **Extract token** → `dlaiJwtToken` and raw `idToken` stored in cookie
 5. **Call DLAI API** → Use token as Bearer auth
-6. **Sign out** → OIDC RP-Initiated Logout revokes both local and ymir sessions
+6. **Token expires** → Auto-refresh via Ymir userinfo + OAuth refresh token
+7. **Sign out** → OIDC RP-Initiated Logout revokes both local and ymir sessions
 
 ## Key Code
 
@@ -122,6 +127,39 @@ For production, you'll need your own OAuth credentials:
 1. Contact the DLAI team to register your app
 2. Provide your redirect URI: `https://your-app.com/api/auth/oauth2/callback/dlai`
 3. Update `.env.local` with your credentials and `NEXT_PUBLIC_AUTH_URL=https://auth.deeplearning.ai`
+
+## Token Refresh
+
+DLAI JWT tokens expire after 30 days. When this happens, the app automatically refreshes them without requiring the user to re-login.
+
+### How It Works
+
+```
+DLAI API returns 401 (token expired)
+  → Call Ymir /oauth2/userinfo with stored OAuth access token
+    → If 401 (OAuth access token also expired):
+      → Use refresh token at Ymir /oauth2/token to get new access token
+      → Call /oauth2/userinfo again with new access token
+    → Ymir refreshes DLAI token internally and returns fresh claims
+  → Update cookie with new tokens
+  → Retry original DLAI API call
+```
+
+### Key Details
+
+- The `offline_access` scope is requested during login to obtain a refresh token
+- OAuth access tokens (30 days) and refresh tokens (60 days) are stored in the `dlai_auth` cookie alongside the DLAI JWT
+- When Ymir's `/oauth2/userinfo` is called, it automatically refreshes the DLAI JWT via the upstream API
+- The refresh logic lives in `src/lib/refresh.ts` and is called transparently by `src/app/api/profile/route.ts`
+- The UI shows a green "Token was expired and has been refreshed" message when a refresh occurs
+
+### Testing Token Refresh
+
+1. Sign in normally
+2. Open browser DevTools → Application → Cookies
+3. Find the `dlai_auth` cookie and edit the `dlaiJwtToken` value (corrupt it or set it to `"expired"`)
+4. Click "Fetch Profile from DLAI API"
+5. The app should automatically refresh the token and show the profile with a green "refreshed" indicator
 
 ## Important: Tricky Parts
 

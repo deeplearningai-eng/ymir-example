@@ -1,15 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, discoveryPromise } from "@/lib/auth";
-
-const DLAI_COOKIE_NAME = "dlai_auth";
-const SESSION_COOKIE_NAME = "better-auth.session_token";
-const CLEAR_COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
-  path: "/",
-  maxAge: 0,
-};
+import { auth, discoveryPromise, DLAI_COOKIE_NAME, SESSION_COOKIE_NAME, CLEAR_COOKIE_OPTIONS } from "@/lib/auth";
 
 /**
  * POST /api/auth/logout
