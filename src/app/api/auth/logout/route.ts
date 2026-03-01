@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, discoveryPromise } from "@/lib/auth";
 
-const DLAI_COOKIE_NAME = "dlai_account_data";
+const DLAI_COOKIE_NAME = "dlai_auth";
 const SESSION_COOKIE_NAME = "better-auth.session_token";
 const CLEAR_COOKIE_OPTIONS = {
   httpOnly: true,

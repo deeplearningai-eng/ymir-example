@@ -32,7 +32,7 @@ interface DlaiAccountData {
   idToken?: string;
 }
 
-const DLAI_COOKIE_NAME = "dlai_account_data";
+const DLAI_COOKIE_NAME = "dlai_auth";
 
 // Temporary storage for passing claims from getUserInfo to after hook
 let pendingClaims: (DlaiClaims & { rawIdToken?: string }) | null = null;

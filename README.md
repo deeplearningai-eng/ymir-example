@@ -163,7 +163,7 @@ if (idToken) {
 const redirectUrl = `${discovery.endSessionEndpoint}?${params}`;
 ```
 
-The `idToken` is stored in the `dlai_account_data` cookie during OAuth callback and passed as `id_token_hint` to prove the user initiated the logout.
+The `idToken` is stored in the `dlai_auth` cookie during OAuth callback and passed as `id_token_hint` to prove the user initiated the logout.
 
 Client calls this and redirects:
 ```typescript
