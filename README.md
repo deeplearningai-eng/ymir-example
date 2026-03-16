@@ -206,10 +206,8 @@ DLAI JWT tokens expire after 30 days. When this happens, the app automatically r
 
 ```
 DLAI API returns 401 (token expired)
-  → Call Ymir /oauth2/userinfo with stored OAuth access token
-    → If 401 (OAuth access token also expired):
-      → Use refresh token at Ymir /oauth2/token to get new access token
-      → Call /oauth2/userinfo again with new access token
+  → Exchange refresh token at Ymir /oauth2/token for new access token
+  → Call Ymir /oauth2/userinfo with new access token
     → Ymir refreshes DLAI token internally and returns fresh claims
   → Update cookie with new tokens
   → Retry original DLAI API call
