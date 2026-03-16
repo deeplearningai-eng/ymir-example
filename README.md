@@ -69,7 +69,7 @@ src/
 ## How It Works
 
 1. **User clicks "Sign in"** → Redirects to DLAI auth server
-2. **User authenticates** → Google, LinkedIn, or email/password
+2. **User authenticates** → Google, LinkedIn, Apple, or email/password
 3. **OAuth callback** → App fetches DLAI claims from `/oauth2/userinfo`
 4. **Extract token** → `dlaiJwtToken` and raw `idToken` stored in cookie
 5. **Call DLAI API** → Use token as Bearer auth
@@ -136,10 +136,8 @@ DLAI JWT tokens expire after 30 days. When this happens, the app automatically r
 
 ```
 DLAI API returns 401 (token expired)
-  → Call Ymir /oauth2/userinfo with stored OAuth access token
-    → If 401 (OAuth access token also expired):
-      → Use refresh token at Ymir /oauth2/token to get new access token
-      → Call /oauth2/userinfo again with new access token
+  → Exchange refresh token at Ymir /oauth2/token for new access token
+  → Call Ymir /oauth2/userinfo with new access token
     → Ymir refreshes DLAI token internally and returns fresh claims
   → Update cookie with new tokens
   → Retry original DLAI API call
