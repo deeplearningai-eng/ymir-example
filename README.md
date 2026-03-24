@@ -62,14 +62,71 @@ src/
         └── logout/route.ts    # OIDC RP-Initiated Logout
 ```
 
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_APP_URL` | Where this app runs (e.g., `http://localhost:3000`) |
+| `SESSION_SECRET` | Min 32 chars, used by Better Auth for session encryption |
+| `DLAI_OAUTH_CLIENT_ID` | OAuth client ID (from DLAI team) |
+| `DLAI_OAUTH_CLIENT_SECRET` | OAuth client secret (from DLAI team) |
+| `NEXT_PUBLIC_AUTH_URL` | Ymir auth server URL (`https://auth-dev.deeplearning.ai` for dev) |
+
 ## How It Works
 
-1. **User clicks "Sign in"** → Redirects to DLAI auth server
-2. **User authenticates** → Google, LinkedIn, or email/password
-3. **OAuth callback** → App fetches DLAI claims from `/oauth2/userinfo`
-4. **Extract token** → `dlaiJwtToken` and raw `idToken` stored in cookie
-5. **Call DLAI API** → Use token as Bearer auth
-6. **Sign out** → OIDC RP-Initiated Logout revokes both local and ymir sessions
+```
+Browser                     App Server                    Ymir Auth Server
+  │                            │                               │
+  │ Click "Sign in"            │                               │
+  ├───────────────────────────►│                               │
+  │                            │  GET /oauth2/authorize        │
+  │  302 Redirect              │  (PKCE + state)               │
+  │◄───────────────────────────├──────────────────────────────►│
+  │                            │                               │
+  │  User authenticates (Google/LinkedIn/Apple/email)          │
+  │◄──────────────────────────────────────────────────────────►│
+  │                            │                               │
+  │  302 → /api/auth/oauth2/callback/dlai?code=...            │
+  │────────────────────────────►│                               │
+  │                            │  POST /oauth2/token           │
+  │                            │  (exchange code for tokens)   │
+  │                            ├──────────────────────────────►│
+  │                            │◄──────────────────────────────┤
+  │                            │                               │
+  │                            │  GET /oauth2/userinfo         │
+  │                            │  (fetch dlaiJwtToken, etc.)   │
+  │                            ├──────────────────────────────►│
+  │                            │◄──────────────────────────────┤
+  │                            │                               │
+  │  Set cookies:              │                               │
+  │  - session_token           │                               │
+  │  - dlai_auth (JWT+idToken) │                               │
+  │◄───────────────────────────┤                               │
+  │                            │                               │
+  │  GET /api/profile          │                               │
+  │────────────────────────────►│  GET /user/profile            │
+  │                            ├──────────────────────────────►│ DLAI API
+  │  Profile JSON              │◄──────────────────────────────┤
+  │◄───────────────────────────┤                               │
+```
+
+### Sign-out Flow
+
+```
+Browser                     App Server                    Ymir Auth Server
+  │                            │                               │
+  │ POST /api/auth/logout      │                               │
+  ├───────────────────────────►│  signOut() + clear cookies    │
+  │                            ├──────────────────────────────►│
+  │  { redirectUrl }           │                               │
+  │◄───────────────────────────┤                               │
+  │                            │                               │
+  │  Navigate to end_session_endpoint?id_token_hint=...        │
+  ├────────────────────────────────────────────────────────────►│
+  │                            │  Revoke ymir session           │
+  │  302 → post_logout_redirect_uri                            │
+  │◄────────────────────────────────────────────────────────────┤
+```
 
 ## Key Code
 
@@ -92,17 +149,23 @@ genericOAuth({
 })
 ```
 
-### Using the Token
+### Using the Token (Server-Side)
+
+DLAI API must be called from a server-side route (no browser CORS):
 
 ```typescript
-const { data: session } = useSession();
+// src/app/api/profile/route.ts
+const session = await auth.api.getSession({ headers: request.headers });
+const token = session.user.dlaiJwtToken;
 
-// Call DLAI API
-fetch("https://platform-api-dev.dlai.link/user/profile", {
-  headers: {
-    Authorization: `Bearer ${session.user.dlaiJwtToken}`,
-  },
+const res = await fetch(`${DLAI_API_URL}/user/profile`, {
+  headers: { Authorization: `Bearer ${token}` },
 });
+```
+
+Client calls your route:
+```typescript
+const res = await fetch("/api/profile");
 ```
 
 ## Token Claims
