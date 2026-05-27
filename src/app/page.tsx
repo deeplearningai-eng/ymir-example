@@ -52,6 +52,15 @@ export default function Home() {
     );
   }
 
+  // The DLAI fields are added server-side by customSession and aren't visible
+  // to the client's inferred session type (the client auth instance doesn't
+  // import the server config). Narrow them at the read site, as done in
+  // src/app/api/profile/route.ts.
+  const dlaiUser = session.user as {
+    dlaiUserId?: number | null;
+    dlaiJwtToken?: string | null;
+  };
+
   return (
     <div>
       <h1>Welcome, {session.user.name ?? session.user.email}!</h1>
@@ -70,13 +79,13 @@ export default function Home() {
               <td style={{ padding: "0.25rem 1rem 0.25rem 0" }}>
                 <strong>DLAI User ID:</strong>
               </td>
-              <td>{session.user.dlaiUserId ?? "N/A"}</td>
+              <td>{dlaiUser.dlaiUserId ?? "N/A"}</td>
             </tr>
             <tr>
               <td style={{ padding: "0.25rem 1rem 0.25rem 0" }}>
                 <strong>Has JWT Token:</strong>
               </td>
-              <td>{session.user.dlaiJwtToken ? "Yes" : "No"}</td>
+              <td>{dlaiUser.dlaiJwtToken ? "Yes" : "No"}</td>
             </tr>
           </tbody>
         </table>
