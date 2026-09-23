@@ -12,6 +12,7 @@ https://github.com/user-attachments/assets/62701bfb-c651-4472-9186-51a8a270e3de
 - Extract `dlaiJwtToken` from the session
 - Call DLAI API (`/user/profile`) using the token
 - Federated logout via OIDC RP-Initiated Logout
+- Single logout: signing out of any DLAI app signs you out here too (front-channel logout)
 
 ## Quick Start
 
@@ -58,8 +59,9 @@ src/
     ├── layout.tsx
     ├── page.tsx        # Demo UI
     └── api/auth/
-        ├── [...all]/route.ts  # Better Auth routes
-        └── logout/route.ts    # OIDC RP-Initiated Logout
+        ├── [...all]/route.ts       # Better Auth routes
+        ├── logout/route.ts         # OIDC RP-Initiated Logout (starts a logout)
+        └── logout-clear/route.ts   # Front-channel logout (receives a logout)
 ```
 
 ## Environment Variables
@@ -124,9 +126,14 @@ Browser                     App Server                    Ymir Auth Server
   │  Navigate to end_session_endpoint?id_token_hint=...        │
   ├────────────────────────────────────────────────────────────►│
   │                            │  Revoke ymir session           │
-  │  302 → post_logout_redirect_uri                            │
+  │  "Signing out…" page with one hidden iframe per DLAI app   │
   │◄────────────────────────────────────────────────────────────┤
+  │  GET <each app>/api/auth/logout-clear (in iframes)         │
+  │  → every app clears its own cookies                        │
+  │  → post_logout_redirect_uri                                │
 ```
+
+See [Single Logout](#5-single-logout-front-channel) for how the iframe step works.
 
 ## Key Code
 
@@ -184,7 +191,8 @@ For production, you'll need your own OAuth credentials:
 
 1. Contact the DLAI team to register your app
 2. Provide your redirect URI: `https://your-app.com/api/auth/oauth2/callback/dlai`
-3. Update `.env.local` with your credentials and `NEXT_PUBLIC_AUTH_URL=https://auth.deeplearning.ai`
+3. Provide your front-channel logout URI: `https://your-app.deeplearning.ai/api/auth/logout-clear` (see [Single Logout](#5-single-logout-front-channel))
+4. Update `.env.local` with your credentials and `NEXT_PUBLIC_AUTH_URL=https://auth.deeplearning.ai`
 
 ## Important: Tricky Parts
 
@@ -265,6 +273,56 @@ Client calls your API route instead:
 const res = await fetch("/api/profile");
 ```
 
+### 5. Single Logout (front-channel)
+
+`/api/auth/logout` (section 2) handles a logout that **starts in this app**. The
+other half is a logout that **starts in another DLAI app** (www, learn,
+corporate, ...). The user expects that to sign them out here too.
+
+ymir does this with [OIDC Front-Channel Logout](https://openid.net/specs/openid-connect-frontchannel-1_0.html).
+Whenever any app sends the user to `end_session_endpoint`, ymir returns a
+"Signing out…" page that loads each registered client's
+`frontchannel_logout_uri` in a hidden iframe, then redirects to the
+`post_logout_redirect_uri`. This app's endpoint is `/api/auth/logout-clear`:
+
+```typescript
+// src/app/api/auth/logout-clear/route.ts
+export function GET(request: NextRequest) {
+  const response = new NextResponse(null, { status: 200 });
+  return clearAuthCookies(request, response);
+}
+```
+
+To enable it:
+
+1. Deploy `/api/auth/logout-clear`.
+2. Ask the DLAI team to set it as your OAuth client's **Frontchannel Logout URI**
+   (one URI per client).
+3. Keep your own logout going through `end_session_endpoint` (section 2).
+   Otherwise, logging out here won't sign the user out of the other apps.
+
+Requirements for the endpoint:
+
+- **GET, no auth, idempotent.** ymir notifies every registered client on every
+  logout, including apps this browser never signed into. For those it's a no-op.
+- **Frameable by ymir.** Don't send `X-Frame-Options: DENY` or a CSP
+  `frame-ancestors` that excludes the ymir origin, or the browser blocks the
+  iframe.
+- **Clear every cookie variant.** On https, Better Auth prefixes its cookies with
+  `__Secure-` and splits large sessions into `.0`, `.1`, ... chunks.
+  `clearAuthCookies` (`src/lib/clear-auth-cookies.ts`) expires everything in the
+  cookie jar that starts with `better-auth.`, `__Secure-better-auth.` or
+  `dlai_auth`, rather than a fixed list of names.
+
+> **Same-site only.** The iframe runs inside the ymir page, so this app's cookies
+> count as third-party there. Browsers ignore `SameSite=Lax` cookies set from a
+> cross-site iframe. `SameSite=None` works in Chrome but not in Safari or Firefox.
+> Front-channel logout is only reliable when your app is on a
+> `*.deeplearning.ai` subdomain. It also won't work against `http://localhost`,
+> since localhost is cross-site to `auth-dev.deeplearning.ai`. To test locally,
+> map a same-site hostname (for example `example.local.deeplearning.ai`) to
+> `127.0.0.1` in `/etc/hosts`.
+
 ## Troubleshooting
 
 ### "Invalid redirect_uri"
@@ -285,6 +343,14 @@ Check that Ymir is returning claims from `/oauth2/userinfo`. The `dlaiJwtToken` 
 ### Auto-login after sign out
 
 You need to clear both local and ymir sessions. The `/api/auth/logout` route uses OIDC RP-Initiated Logout to revoke the ymir session. Make sure `idToken` is being stored in the cookie during OAuth callback.
+
+### Still signed in here after logging out of another DLAI app
+
+Check, in this order:
+
+1. The client's Frontchannel Logout URI is registered in ymir and points at this deployment's `/api/auth/logout-clear`.
+2. The app is on a `*.deeplearning.ai` subdomain (see the same-site note in section 5).
+3. In the other app's logout, the "Signing out…" page's iframe request to `/api/auth/logout-clear` returns 200 with `Set-Cookie: ...; Max-Age=0` and isn't blocked by `X-Frame-Options`.
 
 ## License
 
