@@ -27,11 +27,15 @@ export interface DlaiClaims {
 export interface DlaiAccountData {
   dlaiJwtToken: string;
   dlaiUserId: number;
-  dlaiUserHash: string;
+  dlaiUserHash?: string;
   /** OAuth access token for calling Ymir endpoints (e.g. /oauth2/userinfo) */
-  accessToken: string;
-  /** OAuth refresh token for obtaining new access tokens when expired */
-  refreshToken: string;
+  accessToken?: string;
+  /**
+   * OAuth refresh token for obtaining new access tokens when expired. Absent
+   * if ymir didn't grant `offline_access`; the app then works until the DLAI
+   * JWT expires and the user signs in again.
+   */
+  refreshToken?: string;
   /** Raw OIDC id_token JWT — used for RP-Initiated Logout (id_token_hint) */
   idToken?: string;
 }
@@ -46,14 +50,28 @@ export const DLAI_COOKIE_OPTIONS = {
   maxAge: 60 * 60 * 24 * 30, // 30 days
 };
 
-// Temporary storage for passing claims from getUserInfo to after hook
-let pendingClaims:
-  | (DlaiClaims & {
-      rawIdToken?: string;
-      accessToken?: string;
-      refreshToken?: string;
-    })
-  | null = null;
+type PendingClaims = DlaiClaims & {
+  rawIdToken?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  createdAt: number;
+};
+
+/**
+ * Claims handed from getUserInfo() to the callback's after hook, keyed by the
+ * signing-in user's email. A single module variable would let two concurrent
+ * logins swap claims, giving one user's browser the other user's tokens.
+ * Entries from callbacks that never reach the hook (e.g. a failed sign-in)
+ * are dropped after PENDING_TTL_MS.
+ */
+const pendingClaims = new Map<string, PendingClaims>();
+const PENDING_TTL_MS = 60_000;
+
+function prunePendingClaims(now: number) {
+  for (const [key, value] of pendingClaims) {
+    if (now - value.createdAt > PENDING_TTL_MS) pendingClaims.delete(key);
+  }
+}
 
 const DISCOVERY_URL = `${process.env.NEXT_PUBLIC_AUTH_URL}/.well-known/openid-configuration`;
 
@@ -110,12 +128,15 @@ export const auth = betterAuth({
               throw new Error("Missing sub claim in userinfo response");
             }
 
-            pendingClaims = {
+            const now = Date.now();
+            prunePendingClaims(now);
+            pendingClaims.set(claims.email ?? "", {
               ...claims,
               rawIdToken: tokens.idToken,
               accessToken: tokens.accessToken,
               refreshToken: tokens.refreshToken,
-            };
+              createdAt: now,
+            });
 
             return {
               id: claims.sub,
@@ -160,10 +181,14 @@ export const auth = betterAuth({
         return;
       }
 
-      const claims = pendingClaims;
-      pendingClaims = null;
+      // newSession is the session this callback just created; its email is
+      // the key getUserInfo() stored the claims under.
+      const email = ctx.context.newSession?.user.email;
+      if (email === undefined) return;
+      const claims = pendingClaims.get(email);
+      pendingClaims.delete(email);
 
-      if (claims?.dlaiJwtToken && claims.dlaiUserId && claims.dlaiUserHash && claims.accessToken && claims.refreshToken) {
+      if (claims?.dlaiJwtToken && claims.dlaiUserId) {
         ctx.setCookie(
           DLAI_COOKIE_NAME,
           JSON.stringify({

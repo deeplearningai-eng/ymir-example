@@ -24,17 +24,24 @@ function readCookie(request: NextRequest): DlaiAccountData | null {
 }
 
 /**
- * Attempt to refresh the DLAI JWT token.
- *
- * Returns fresh DlaiAccountData on success, or null if refresh failed.
- * When null is returned, caller should clear cookies via clearAuthCookies()
- * (`@/lib/clear-auth-cookies`).
+ * - `ok`: fresh tokens. Write them to the cookie even if the follow-up API
+ *   call fails, because ymir has already rotated the refresh token.
+ * - `invalid`: the refresh token is gone, expired, or revoked (e.g. the user
+ *   logged out at ymir). Clear the cookies so the user signs in again.
+ * - `unavailable`: ymir timed out or errored. Keep the cookies and let the
+ *   next request retry, rather than logging the user out over a blip.
  */
+export type RefreshResult =
+  | { status: "ok"; data: DlaiAccountData }
+  | { status: "invalid" }
+  | { status: "unavailable" };
+
+/** Attempt to refresh the DLAI JWT token. */
 export async function refreshDlaiToken(
   request: NextRequest,
-): Promise<DlaiAccountData | null> {
+): Promise<RefreshResult> {
   const stored = readCookie(request);
-  if (!stored?.refreshToken) return null;
+  if (!stored?.refreshToken) return { status: "invalid" };
 
   try {
     const discovery = await discoveryPromise;
@@ -52,7 +59,12 @@ export async function refreshDlaiToken(
       }),
     });
 
-    if (!tokenRes.ok) return null;
+    // RFC 6749 §5.2: a bad/expired/revoked grant is a 400 (invalid_grant);
+    // a bad client is a 401. Anything else is a server-side problem.
+    if (tokenRes.status === 400 || tokenRes.status === 401) {
+      return { status: "invalid" };
+    }
+    if (!tokenRes.ok) return { status: "unavailable" };
 
     const tokenData = (await tokenRes.json()) as {
       access_token: string;
@@ -60,7 +72,7 @@ export async function refreshDlaiToken(
       id_token?: string;
     };
 
-    if (!tokenData.access_token) return null;
+    if (!tokenData.access_token) return { status: "unavailable" };
 
     // Step 2: Fetch fresh DLAI claims from userinfo
     const userinfoRes = await fetch(discovery.userinfoEndpoint, {
@@ -68,23 +80,27 @@ export async function refreshDlaiToken(
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
 
-    if (!userinfoRes.ok) return null;
+    if (!userinfoRes.ok) return { status: "unavailable" };
 
     const claims = (await userinfoRes.json()) as DlaiClaims;
 
-    if (!claims.dlaiJwtToken || !claims.dlaiUserId || !claims.dlaiUserHash) {
-      return null;
+    if (!claims.dlaiJwtToken || !claims.dlaiUserId) {
+      return { status: "unavailable" };
     }
 
     return {
-      dlaiUserId: claims.dlaiUserId,
-      dlaiJwtToken: claims.dlaiJwtToken,
-      dlaiUserHash: claims.dlaiUserHash,
-      accessToken: tokenData.access_token,
-      refreshToken: tokenData.refresh_token ?? stored.refreshToken,
-      idToken: tokenData.id_token ?? stored.idToken,
+      status: "ok",
+      data: {
+        dlaiUserId: claims.dlaiUserId,
+        dlaiJwtToken: claims.dlaiJwtToken,
+        dlaiUserHash: claims.dlaiUserHash,
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token ?? stored.refreshToken,
+        idToken: tokenData.id_token ?? stored.idToken,
+      },
     };
   } catch {
-    return null;
+    // Network error or the 5s timeout
+    return { status: "unavailable" };
   }
 }

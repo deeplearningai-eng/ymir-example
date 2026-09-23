@@ -42,8 +42,8 @@ export async function GET(request: NextRequest) {
   }
 
   // 401 — attempt token refresh
-  const refreshed = await refreshDlaiToken(request);
-  if (!refreshed) {
+  const refresh = await refreshDlaiToken(request);
+  if (refresh.status === "invalid") {
     return clearAuthCookies(
       request,
       NextResponse.json(
@@ -52,24 +52,29 @@ export async function GET(request: NextRequest) {
       ),
     );
   }
-
-  // Retry DLAI API with refreshed token
-  const retryRes = await callDlaiProfile(refreshed.dlaiJwtToken);
-
-  if (!retryRes.ok) {
+  if (refresh.status === "unavailable") {
     return NextResponse.json(
-      { error: `DLAI API error after refresh: ${retryRes.status}` },
-      { status: retryRes.status },
+      { error: "Auth server unavailable, try again" },
+      { status: 503 },
     );
   }
 
-  const profile = await retryRes.json();
-  const response = NextResponse.json({ ...profile, refreshed: true });
+  // Retry DLAI API with refreshed token
+  const retryRes = await callDlaiProfile(refresh.data.dlaiJwtToken);
 
-  // Update cookie with refreshed tokens
+  const response = retryRes.ok
+    ? NextResponse.json({ ...(await retryRes.json()), refreshed: true })
+    : NextResponse.json(
+        { error: `DLAI API error after refresh: ${retryRes.status}` },
+        { status: retryRes.status },
+      );
+
+  // Persist the rotated tokens on every path: ymir has already invalidated
+  // the old refresh token, so dropping these would log the user out at the
+  // next refresh.
   response.cookies.set(
     DLAI_COOKIE_NAME,
-    JSON.stringify(refreshed),
+    JSON.stringify(refresh.data),
     DLAI_COOKIE_OPTIONS,
   );
 
