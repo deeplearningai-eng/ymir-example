@@ -11,6 +11,7 @@ https://github.com/user-attachments/assets/62701bfb-c651-4472-9186-51a8a270e3de
 - Sign in via DLAI auth server (OAuth 2.1 + PKCE)
 - Extract `dlaiJwtToken` from the session
 - Call DLAI API (`/user/profile`) using the token
+- **Automatic token refresh** when the DLAI JWT expires
 - Federated logout via OIDC RP-Initiated Logout
 - Single logout: signing out of any DLAI app signs you out here too (front-channel logout)
 
@@ -54,14 +55,17 @@ Click "Sign in with DLAI" and use these test credentials:
 src/
 ├── lib/
 │   ├── auth.ts         # Better Auth server config
-│   └── auth-client.ts  # React auth hooks
+│   ├── auth-client.ts  # React auth hooks
+│   └── refresh.ts      # Server-side DLAI token refresh
 └── app/
     ├── layout.tsx
     ├── page.tsx        # Demo UI
-    └── api/auth/
-        ├── [...all]/route.ts       # Better Auth routes
-        ├── logout/route.ts         # OIDC RP-Initiated Logout (starts a logout)
-        └── logout-clear/route.ts   # Front-channel logout (receives a logout)
+    └── api/
+        ├── auth/
+        │   ├── [...all]/route.ts       # Better Auth routes
+        │   ├── logout/route.ts         # OIDC RP-Initiated Logout (starts a logout)
+        │   └── logout-clear/route.ts   # Front-channel logout (receives a logout)
+        └── profile/route.ts            # DLAI API proxy with auto-refresh
 ```
 
 ## Environment Variables
@@ -102,7 +106,7 @@ Browser                     App Server                    Ymir Auth Server
   │                            │                               │
   │  Set cookies:              │                               │
   │  - session_token           │                               │
-  │  - dlai_auth (JWT+idToken) │                               │
+  │  - dlai_auth (JWT, tokens) │                               │
   │◄───────────────────────────┤                               │
   │                            │                               │
   │  GET /api/profile          │                               │
@@ -193,6 +197,38 @@ For production, you'll need your own OAuth credentials:
 2. Provide your redirect URI: `https://your-app.com/api/auth/oauth2/callback/dlai`
 3. Provide your front-channel logout URI: `https://your-app.deeplearning.ai/api/auth/logout-clear` (see [Single Logout](#5-single-logout-front-channel))
 4. Update `.env.local` with your credentials and `NEXT_PUBLIC_AUTH_URL=https://auth.deeplearning.ai`
+
+## Token Refresh
+
+When the DLAI JWT expires, the app refreshes it automatically, without making the user log in again.
+
+### How It Works
+
+```
+DLAI API returns 401 (token expired)
+  → Exchange refresh token at Ymir /oauth2/token for new access token
+  → Call Ymir /oauth2/userinfo with new access token
+    → Ymir refreshes DLAI token internally and returns fresh claims
+  → Update cookie with new tokens
+  → Retry original DLAI API call
+```
+
+### Key Details
+
+- The `offline_access` scope is requested during login to obtain a refresh token
+- The OAuth access token (1 hour) and refresh token (60 days) are stored in the `dlai_auth` cookie alongside the DLAI JWT
+- When Ymir's `/oauth2/userinfo` is called, it automatically refreshes the DLAI JWT via the upstream API
+- The refresh logic lives in `src/lib/refresh.ts` and is called transparently by `src/app/api/profile/route.ts`
+- The UI shows a green "Token was expired and has been refreshed" message when a refresh occurs
+- If the refresh fails, all auth cookies are cleared and the user has to sign in again. This is also a partial backstop for [Single Logout](#5-single-logout-front-channel). When a logout reaches ymir with a live ymir session, `end_session_endpoint` revokes the user's refresh tokens for that session plus any left over from already-deleted sessions. An app that missed the front-channel iframe then gets logged out at its next refresh. Tokens belonging to the user's other live sessions (other browsers) are not revoked
+
+### Testing Token Refresh
+
+1. Sign in normally
+2. Open browser DevTools → Application → Cookies
+3. Find the `dlai_auth` cookie and edit the `dlaiJwtToken` value (corrupt it or set it to `"expired"`)
+4. Click "Fetch Profile from DLAI API"
+5. The app should automatically refresh the token and show the profile with a green "refreshed" indicator
 
 ## Important: Tricky Parts
 
