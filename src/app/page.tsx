@@ -8,10 +8,12 @@ export default function Home() {
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshed, setRefreshed] = useState(false);
 
   async function fetchProfile() {
     setLoading(true);
     setError(null);
+    setRefreshed(false);
 
     try {
       // Call server-side API route (avoids CORS issues with DLAI API)
@@ -21,7 +23,9 @@ export default function Home() {
         const data = await res.json();
         throw new Error(data.error || `API error: ${res.status}`);
       }
-      setProfile(await res.json());
+      const data = await res.json();
+      setRefreshed(!!data.refreshed);
+      setProfile(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch profile");
     } finally {
@@ -91,6 +95,12 @@ export default function Home() {
         >
           {loading ? "Loading..." : "Fetch Profile from DLAI API"}
         </button>
+
+        {refreshed && (
+          <p style={{ color: "green", marginTop: "0.5rem" }}>
+            Token was expired and has been refreshed automatically.
+          </p>
+        )}
 
         {error && <p style={{ color: "red" }}>{error}</p>}
 

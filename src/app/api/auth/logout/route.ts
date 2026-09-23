@@ -1,15 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, discoveryPromise } from "@/lib/auth";
+import { clearAuthCookies } from "@/lib/clear-auth-cookies";
 
 const DLAI_COOKIE_NAME = "dlai_auth";
-const SESSION_COOKIE_NAME = "better-auth.session_token";
-const CLEAR_COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
-  path: "/",
-  maxAge: 0,
-};
 
 /**
  * POST /api/auth/logout
@@ -49,10 +42,10 @@ export async function POST(request: NextRequest) {
   }
   const redirectUrl = `${discovery.endSessionEndpoint}?${params}`;
 
-  const response = NextResponse.json({ success: true, redirectUrl });
-
-  response.cookies.set(SESSION_COOKIE_NAME, "", CLEAR_COOKIE_OPTIONS);
-  response.cookies.set(DLAI_COOKIE_NAME, "", CLEAR_COOKIE_OPTIONS);
-
-  return response;
+  // ymir's end-session also fans out to every other registered client's
+  // logout-clear endpoint, so this one sign-out logs the user out everywhere.
+  return clearAuthCookies(
+    request,
+    NextResponse.json({ success: true, redirectUrl }),
+  );
 }
