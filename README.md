@@ -56,7 +56,8 @@ src/
 ├── lib/
 │   ├── auth.ts         # Better Auth server config
 │   ├── auth-client.ts  # React auth hooks
-│   └── refresh.ts      # Server-side DLAI token refresh
+│   ├── refresh.ts      # Server-side DLAI token refresh
+│   └── clear-auth-cookies.ts  # Expires every auth cookie (logout, logout-clear, failed refresh)
 └── app/
     ├── layout.tsx
     ├── page.tsx        # Demo UI
@@ -220,7 +221,12 @@ DLAI API returns 401 (token expired)
 - When Ymir's `/oauth2/userinfo` is called, it automatically refreshes the DLAI JWT via the upstream API
 - The refresh logic lives in `src/lib/refresh.ts` and is called transparently by `src/app/api/profile/route.ts`
 - The UI shows a green "Token was expired and has been refreshed" message when a refresh occurs
-- If the refresh fails, all auth cookies are cleared and the user has to sign in again. This is also a partial backstop for [Single Logout](#5-single-logout-front-channel). When a logout reaches ymir with a live ymir session, `end_session_endpoint` revokes the user's refresh tokens for that session plus any left over from already-deleted sessions. An app that missed the front-channel iframe then gets logged out at its next refresh. Tokens belonging to the user's other live sessions (other browsers) are not revoked
+- Refresh tokens rotate: each refresh returns a new one and invalidates the old one. The rotated tokens are written back to the cookie even when the retried API call fails.
+- If ymir rejects the refresh token (400/401 from the token endpoint), all auth cookies are cleared and the user has to sign in again. If ymir is just unreachable or errors, the route returns 503 and keeps the cookies. This is also a partial backstop for [Single Logout](#5-single-logout-front-channel). When a logout reaches ymir with a live ymir session, `end_session_endpoint` revokes the user's refresh tokens for that session plus any left over from already-deleted sessions. An app that missed the front-channel iframe then gets logged out at its next refresh. Tokens belonging to the user's other live sessions (other browsers) are not revoked
+
+### Limitation: concurrent refreshes
+
+Because refresh tokens rotate, two requests that hit a 401 at the same moment both send the same refresh token. The second one is rejected, and that request clears the cookies. The demo only calls one API route at a time, so it doesn't hit this. An app that fires parallel API calls should funnel refreshes through one place, for example by refreshing ahead of the access token's expiry, before it copies this pattern.
 
 ### Testing Token Refresh
 
@@ -324,7 +330,10 @@ Whenever any app sends the user to `end_session_endpoint`, ymir returns a
 ```typescript
 // src/app/api/auth/logout-clear/route.ts
 export function GET(request: NextRequest) {
-  const response = new NextResponse(null, { status: 200 });
+  const response = new NextResponse(null, {
+    status: 200,
+    headers: { "Cache-Control": "no-store" },
+  });
   return clearAuthCookies(request, response);
 }
 ```
