@@ -200,7 +200,7 @@ For production, you'll need your own OAuth credentials:
 
 ## Token Refresh
 
-DLAI JWT tokens expire after 30 days. When this happens, the app automatically refreshes them without requiring the user to re-login.
+When the DLAI JWT expires, the app refreshes it automatically, without making the user log in again.
 
 ### How It Works
 
@@ -216,10 +216,11 @@ DLAI API returns 401 (token expired)
 ### Key Details
 
 - The `offline_access` scope is requested during login to obtain a refresh token
-- OAuth access tokens (30 days) and refresh tokens (60 days) are stored in the `dlai_auth` cookie alongside the DLAI JWT
+- The OAuth access token (1 hour) and refresh token (60 days) are stored in the `dlai_auth` cookie alongside the DLAI JWT
 - When Ymir's `/oauth2/userinfo` is called, it automatically refreshes the DLAI JWT via the upstream API
 - The refresh logic lives in `src/lib/refresh.ts` and is called transparently by `src/app/api/profile/route.ts`
 - The UI shows a green "Token was expired and has been refreshed" message when a refresh occurs
+- If the refresh fails, all auth cookies are cleared and the user has to sign in again. This is also a partial backstop for [Single Logout](#5-single-logout-front-channel). When a logout reaches ymir with a live ymir session, `end_session_endpoint` revokes the user's refresh tokens for that session plus any left over from already-deleted sessions. An app that missed the front-channel iframe then gets logged out at its next refresh. Tokens belonging to the user's other live sessions (other browsers) are not revoked
 
 ### Testing Token Refresh
 

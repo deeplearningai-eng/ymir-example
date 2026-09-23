@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, DLAI_COOKIE_NAME, DLAI_COOKIE_OPTIONS } from "@/lib/auth";
-import { refreshDlaiToken, clearAuthCookies } from "@/lib/refresh";
+import { clearAuthCookies } from "@/lib/clear-auth-cookies";
+import { refreshDlaiToken } from "@/lib/refresh";
 
 const DLAI_API_URL =
   process.env.DLAI_API_URL || "https://platform-api-dev.dlai.link";
@@ -43,12 +44,13 @@ export async function GET(request: NextRequest) {
   // 401 — attempt token refresh
   const refreshed = await refreshDlaiToken(request);
   if (!refreshed) {
-    const response = NextResponse.json(
-      { error: "DLAI token expired and refresh failed" },
-      { status: 401 },
+    return clearAuthCookies(
+      request,
+      NextResponse.json(
+        { error: "DLAI token expired and refresh failed" },
+        { status: 401 },
+      ),
     );
-    clearAuthCookies(response);
-    return response;
   }
 
   // Retry DLAI API with refreshed token

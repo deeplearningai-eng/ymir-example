@@ -8,13 +8,8 @@
  * 4. Clear cookies on any failure to force re-login
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import {
-  discoveryPromise,
-  DLAI_COOKIE_NAME,
-  SESSION_COOKIE_NAME,
-  CLEAR_COOKIE_OPTIONS,
-} from "@/lib/auth";
+import { NextRequest } from "next/server";
+import { discoveryPromise, DLAI_COOKIE_NAME } from "@/lib/auth";
 import type { DlaiAccountData, DlaiClaims } from "@/lib/auth";
 
 /** Read and parse the dlai_auth cookie from the request. */
@@ -28,17 +23,12 @@ function readCookie(request: NextRequest): DlaiAccountData | null {
   }
 }
 
-/** Clear all auth cookies on the response to force re-login. */
-export function clearAuthCookies(response: NextResponse): void {
-  response.cookies.set(DLAI_COOKIE_NAME, "", CLEAR_COOKIE_OPTIONS);
-  response.cookies.set(SESSION_COOKIE_NAME, "", CLEAR_COOKIE_OPTIONS);
-}
-
 /**
  * Attempt to refresh the DLAI JWT token.
  *
  * Returns fresh DlaiAccountData on success, or null if refresh failed.
- * When null is returned, caller should clear cookies via clearAuthCookies().
+ * When null is returned, caller should clear cookies via clearAuthCookies()
+ * (`@/lib/clear-auth-cookies`).
  */
 export async function refreshDlaiToken(
   request: NextRequest,

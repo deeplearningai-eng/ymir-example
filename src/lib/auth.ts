@@ -37,7 +37,6 @@ export interface DlaiAccountData {
 }
 
 export const DLAI_COOKIE_NAME = "dlai_auth";
-export const SESSION_COOKIE_NAME = "better-auth.session_token";
 
 export const DLAI_COOKIE_OPTIONS = {
   httpOnly: true,
@@ -45,11 +44,6 @@ export const DLAI_COOKIE_OPTIONS = {
   sameSite: "lax" as const,
   path: "/",
   maxAge: 60 * 60 * 24 * 30, // 30 days
-};
-
-export const CLEAR_COOKIE_OPTIONS = {
-  ...DLAI_COOKIE_OPTIONS,
-  maxAge: 0,
 };
 
 // Temporary storage for passing claims from getUserInfo to after hook
